@@ -1,0 +1,154 @@
+--Zadatak 1.
+--1.
+SELECT DISTINCT p.pravno_lice_id id, p.naziv ResNaziv
+FROM fizicko_lice f, lokacija l, pravno_lice p
+WHERE f.lokacija_id=l.lokacija_id AND p.lokacija_id=l.lokacija_id
+      AND p.lokacija_id IN (SELECT lokacija_id
+                             FROM fizicko_lice
+                             WHERE lokacija_id IS NOT NULL);
+
+--2.
+SELECT DISTINCT To_Char(u.datum_potpisivanja, 'dd.MM.yyyy') "Datum Potpisivanja", p.naziv resnaziv
+FROM ugovor_za_pravno_lice u, pravno_lice p
+WHERE u.pravno_lice_id=p.pravno_lice_id
+      AND u.datum_potpisivanja > (SELECT Min(datum_kupoprodaje)
+                                  FROM faktura f, proizvod pr, narudzba_proizvoda n
+                                  WHERE n.proizvod_id=pr.proizvod_id AND n.faktura_id=f.faktura_id
+                                        AND pr.broj_mjeseci_garancije IS NOT NULL)
+
+--3.
+SELECT naziv
+FROM proizvod
+WHERE kategorija_id = ANY (SELECT DISTINCT kat.kategorija_id
+                           FROM kolicina kol, proizvod p, narudzba_proizvoda n, kategorija kat
+                           WHERE kol.proizvod_id=p.proizvod_id AND n.proizvod_id=p.proizvod_id AND p.kategorija_id=kat.kategorija_id
+                                 AND kol.kolicina_proizvoda=(SELECT Max(k.kolicina_proizvoda)
+                                                             FROM kolicina k
+                                                             WHERE k.proizvod_id IS NOT NULL ));
+
+--4.
+SELECT p.naziv "Proizvod", pn.naziv "Proizvodjac"
+FROM proizvod p, proizvodjac pr, pravno_lice pn
+WHERE p.proizvodjac_id=pr.proizvodjac_id AND pr.proizvodjac_id=pn.pravno_lice_id
+      AND pr.proizvodjac_id IN (SELECT proizvodjac_id 
+                                FROM proizvod
+                                WHERE cijena > (SELECT Avg(cijena)
+                                                FROM proizvod));
+
+--5.
+SELECT fi.ime||' '||fi.prezime "Ime i prezime", SUM(f.iznos) AS "iznos"
+FROM kupac k, uposlenik u, faktura f, fizicko_lice fi
+WHERE k.kupac_id = fi.fizicko_lice_id
+      AND u.uposlenik_id = fi.fizicko_lice_id
+      AND f.kupac_id = k.kupac_id
+GROUP BY fi.ime, fi.prezime
+HAVING SUM(f.iznos) > (SELECT ROUND(AVG(SUM(f1.iznos)), 2)
+                       FROM faktura f1
+                       JOIN fizicko_lice f2 ON f1.kupac_id = f2.fizicko_lice_id
+                       GROUP BY f2.ime, f2.prezime);
+
+--6.
+SELECT pl.naziv AS "naziv"
+FROM kurirska_sluzba kur, pravno_lice pl, narudzba_proizvoda np, faktura f, isporuka i
+WHERE kur.kurirska_sluzba_id = i.kurirska_sluzba_id
+      AND i.isporuka_id = f.isporuka_id
+      AND f.faktura_id = np.faktura_id
+      AND kur.kurirska_sluzba_id = pl.pravno_lice_id
+GROUP BY pl.naziv
+HAVING SUM(np.kolicina_jednog_proizvoda) = (SELECT MAX(SUM(np1.kolicina_jednog_proizvoda))
+                                            FROM narudzba_proizvoda np1, faktura f1, isporuka i1
+                                            WHERE f1.isporuka_id = i1.isporuka_id AND np1.faktura_id = f1.faktura_id
+                                            GROUP BY i1.kurirska_sluzba_id);
+
+--7.
+SELECT fi.ime||' '||fi.prezime AS "Kupac", sum(pr.cijena*np.kolicina_jednog_proizvoda*po.postotak/100) AS "Usteda", '19413' AS "Indeks"
+FROM kupac ku, fizicko_lice fi, narudzba_proizvoda np, popust po, faktura fa, proizvod pr 
+WHERE ku.kupac_id=fi.fizicko_lice_id AND np.popust_id=po.popust_id AND fa.kupac_id=ku.kupac_id AND np.proizvod_id=pr.proizvod_id AND np.faktura_id=fa.faktura_id
+GROUP BY fi.ime, fi.prezime;
+
+--8.
+SELECT DISTINCT isp.isporuka_id idisporuke, kur.kurirska_sluzba_id idkurirske 
+FROM isporuka isp, faktura fa, kurirska_sluzba kur, narudzba_proizvoda np, proizvod pr
+WHERE fa.isporuka_id=isp.isporuka_id AND np.faktura_id=fa.faktura_id AND np.proizvod_id=pr.proizvod_id AND isp.kurirska_sluzba_id=kur.kurirska_sluzba_id
+      AND np.popust_id IS NOT NULL 
+      AND pr.broj_mjeseci_garancije IS NOT NULL;
+
+--9.
+SELECT pr.naziv naziv, pr.cijena cijena
+FROM proizvod pr, kategorija kat
+WHERE pr.kategorija_id=kat.kategorija_id
+     AND pr.cijena > (SELECT Round(Avg(Max(cijena)), 2)
+                      FROM proizvod
+                      GROUP BY kategorija_id);
+
+--10.
+SELECT p.naziv naziv, p.cijena cijena 
+FROM proizvod p, kategorija kat
+WHERE p.kategorija_id=kat.kategorija_id
+      AND p.cijena < ALL (SELECT Avg(pr.cijena)
+                          FROM proizvod pr, kategorija k
+                          WHERE pr.kategorija_id=k.kategorija_id AND kat.kategorija_id != k.nadkategorija_id 
+                          GROUP BY k.kategorija_id);
+
+--Zadatak 2.
+CREATE TABLE TabelaA (ID NUMBER PRIMARY KEY,
+                      naziv VARCHAR(20),
+                      datum DATE,
+                      cijelibroj NUMBER,
+                      realnibroj NUMBER,
+                      CONSTRAINT rb CHECK (realnibroj>5),
+                      CONSTRAINT cb CHECK (cijelibroj NOT BETWEEN 5 AND 15));
+
+INSERT INTO TabelaA
+VALUES (1,'tekst',NULL,NULL,6.2);
+
+INSERT INTO TabelaA
+VALUES (2,NULL,NULL,3,5.26);
+
+INSERT INTO TabelaA
+VALUES (3,'tekst',NULL,1,NULL);
+
+INSERT INTO TabelaA
+VALUES (4,NULL,NULL,NULL,NULL);
+
+INSERT INTO TabelaA
+VALUES (5,'tekst',NULL,16,6.78);
+
+CREATE TABLE TabelaB (ID NUMBER PRIMARY KEY,
+                      naziv VARCHAR(20),
+                      datum DATE,
+                      cijelibroj NUMBER UNIQUE,
+                      realnibroj NUMBER,
+                      FKTabelaA NUMBER REFERENCES TabelaA (ID) NOT NULL);
+
+INSERT INTO TabelaB
+VALUES (1,NULL,NULL,1,NULL,1);
+
+INSERT INTO TabelaB
+VALUES (2,NULL,NULL,3,NULL,1);
+
+INSERT INTO TabelaB
+VALUES (3,NULL,NULL,6,NULL,2);
+
+INSERT INTO TabelaB
+VALUES (4,NULL,NULL,11,NULL,2);
+
+INSERT INTO TabelaB
+VALUES (5,NULL,NULL,22,NULL,3);
+
+CREATE TABLE TabelaC (ID NUMBER PRIMARY KEY,
+                      naziv VARCHAR(20) NOT NULL,
+                      datum DATE,
+                      cijelibroj NUMBER NOT NULL,
+                      realnibroj NUMBER,
+                      FKTabelaB NUMBER,
+                      CONSTRAINT FKCnst FOREIGN KEY (FKTabelaB) REFERENCES TabelaB (ID));
+
+INSERT INTO TabelaC
+VALUES (1,'YES',NULL,33,NULL,4);
+
+INSERT INTO TabelaC
+VALUES (2,'NO',NULL,33,NULL,2);
+
+INSERT INTO TabelaC
+VALUES (3,'NO',NULL,55,NULL,1);
